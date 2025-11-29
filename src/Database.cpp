@@ -1,3 +1,6 @@
+// ============================================================================
+// INCLUDES
+// ============================================================================
 #include "../include/Database.h"
 #include <sqlite3.h>
 #include <iostream>
@@ -6,6 +9,9 @@
 #include <thread>
 #include <chrono>
 
+// ============================================================================
+// CONSTRUTOR E DESTRUTOR
+// ============================================================================
 Database::Database(const std::string& path) : dbPath(path), db(nullptr) {
     std::filesystem::path dir = std::filesystem::path(path).parent_path();
     if (!dir.empty() && !std::filesystem::exists(dir)) {
@@ -17,6 +23,9 @@ Database::~Database() {
     close();
 }
 
+// ============================================================================
+// INICIALIZAÇÃO E CONFIGURAÇÃO DO BANCO
+// ============================================================================
 bool Database::initialize() {
     if (sqlite3_open(dbPath.c_str(), (sqlite3**)&db) != SQLITE_OK) {
         std::cerr << "Erro ao abrir banco de dados: " << sqlite3_errmsg((sqlite3*)db) << std::endl;
@@ -107,6 +116,9 @@ bool Database::createTagsTables() {
     return executeQuery(queryReceitasTags);
 }
 
+// ============================================================================
+// UTILITÁRIOS DE BANCO DE DADOS
+// ============================================================================
 bool Database::executeQuery(const std::string& query) {
     char* errMsg = nullptr;
     sqlite3* sqliteDb = (sqlite3*)db;
@@ -161,6 +173,9 @@ bool Database::columnExists(const std::string& tableName, const std::string& col
     return false;
 }
 
+// ============================================================================
+// CRUD DE RECEITAS
+// ============================================================================
 int Database::cadastrarReceita(const Receita& receita) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
@@ -315,6 +330,9 @@ bool Database::excluirReceita(int id) {
     return success;
 }
 
+// ============================================================================
+// GERENCIAMENTO DE TAGS
+// ============================================================================
 int Database::createTag(const std::string& nome) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
@@ -457,6 +475,59 @@ std::vector<Receita> Database::getReceitasByTag(const std::string& nomeTag) {
     return receitas;
 }
 
+std::vector<std::pair<int, std::string>> Database::listAllTags() {
+    std::vector<std::pair<int, std::string>> tags;
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "SELECT id, nome FROM tags ORDER BY nome";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return tags;
+    }
+    
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int id = sqlite3_column_int(stmt, 0);
+        const char* nome = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        if (nome) {
+            tags.push_back(std::make_pair(id, std::string(nome)));
+        }
+    }
+    
+    sqlite3_finalize(stmt);
+    return tags;
+}
+
+std::vector<std::string> Database::getTagsByPrefix(const std::string& prefixo) {
+    std::vector<std::string> tags;
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "SELECT nome FROM tags WHERE nome LIKE ? ORDER BY nome LIMIT 10";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return tags;
+    }
+    
+    std::string pattern = prefixo + "%";
+    sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_STATIC);
+    
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* nome = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (nome) {
+            tags.push_back(std::string(nome));
+        }
+    }
+    
+    sqlite3_finalize(stmt);
+    return tags;
+}
+
+// ============================================================================
+// STATUS "FEITA" DAS RECEITAS
+// ============================================================================
 bool Database::marcarReceitaComoFeita(int id, bool feita) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
@@ -510,6 +581,9 @@ std::vector<Receita> Database::getReceitasFeitas() {
     return receitas;
 }
 
+// ============================================================================
+// AVALIAÇÃO DE RECEITAS
+// ============================================================================
 bool Database::avaliarReceita(int id, int nota) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
@@ -581,30 +655,9 @@ std::vector<Receita> Database::getReceitasPorNota(int nota) {
     return receitas;
 }
 
-std::vector<std::pair<int, std::string>> Database::listAllTags() {
-    std::vector<std::pair<int, std::string>> tags;
-    sqlite3* sqliteDb = (sqlite3*)db;
-    sqlite3_stmt* stmt;
-    
-    const char* sql = "SELECT id, nome FROM tags ORDER BY nome";
-    
-    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
-        return tags;
-    }
-    
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        int id = sqlite3_column_int(stmt, 0);
-        const char* nome = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        if (nome) {
-            tags.push_back(std::make_pair(id, std::string(nome)));
-        }
-    }
-    
-    sqlite3_finalize(stmt);
-    return tags;
-}
-
+// ============================================================================
+// BACKUP E RESTAURAÇÃO
+// ============================================================================
 bool Database::fazerBackup(const std::string& caminhoBackup) {
     if (!db) {
         std::cerr << "Banco de dados nao esta aberto." << std::endl;
@@ -823,10 +876,12 @@ bool Database::restaurarBackup(const std::string& caminhoBackup) {
     return true;
 }
 
+// ============================================================================
+// FECHAMENTO E LIMPEZA
+// ============================================================================
 void Database::close() {
     if (db) {
         sqlite3_close((sqlite3*)db);
         db = nullptr;
     }
 }
-

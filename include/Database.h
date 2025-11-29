@@ -42,6 +42,7 @@ public:
     void removeTagFromReceita(int receitaId, int tagId);
     std::vector<Receita> getReceitasByTag(const std::string& nomeTag);
     std::vector<std::pair<int, std::string>> listAllTags();
+    std::vector<std::string> getTagsByPrefix(const std::string& prefixo);
 };
 
 #endif // DATABASE_H

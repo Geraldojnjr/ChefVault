@@ -1,3 +1,6 @@
+// ============================================================================
+// INCLUDES
+// ============================================================================
 #include "../include/Database.h"
 #include "../include/Receita.h"
 #include <sqlite3.h>
@@ -11,11 +14,103 @@
 #include <filesystem>
 #include <cctype>
 
+// ============================================================================
+// FUNÇÕES AUXILIARES
+// ============================================================================
 void limparBuffer() {
     std::cin.clear();
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+std::string solicitarTagsComAutocompletarSimples(Database& db) {
+    std::cout << "Digite as tags separadas por virgula.\n";
+    std::cout << "Dica: Digite ? para ver todas as tags disponiveis.\n";
+    std::cout << "Tags: ";
+    
+    std::string input;
+    std::getline(std::cin, input);
+    
+    // Se o usuário digitou apenas ?, mostrar todas as tags
+    if (input == "?") {
+        auto todasTags = db.listAllTags();
+        if (todasTags.empty()) {
+            std::cout << "Nenhuma tag cadastrada.\n";
+        } else {
+            std::cout << "\n--- Tags Disponiveis ---\n";
+            for (size_t i = 0; i < todasTags.size(); ++i) {
+                std::cout << "  " << (i + 1) << ". " << todasTags[i].second;
+                if ((i + 1) % 5 == 0 || i == todasTags.size() - 1) {
+                    std::cout << "\n";
+                } else {
+                    std::cout << "  |  ";
+                }
+            }
+        }
+        std::cout << "\nAgora digite as tags separadas por virgula: ";
+        std::getline(std::cin, input);
+    }
+    
+    // Processar input e mostrar sugestões para cada tag parcial
+    if (!input.empty()) {
+        std::istringstream iss(input);
+        std::string tag;
+        std::vector<std::string> tagsProcessadas;
+        bool mostrarSugestoes = false;
+        
+        while (std::getline(iss, tag, ',')) {
+            tag.erase(0, tag.find_first_not_of(" \t"));
+            tag.erase(tag.find_last_not_of(" \t") + 1);
+            
+            if (!tag.empty()) {
+                // Verificar se a tag existe ou buscar sugestões
+                auto sugestoes = db.getTagsByPrefix(tag);
+                
+                // Se não encontrou exatamente, mostrar sugestões
+                bool encontrouExato = false;
+                for (const auto& sug : sugestoes) {
+                    if (sug == tag) {
+                        encontrouExato = true;
+                        break;
+                    }
+                }
+                
+                if (!encontrouExato && !sugestoes.empty() && tag.length() >= 2) {
+                    std::cout << "\nSugestoes para \"" << tag << "\": ";
+                    for (size_t i = 0; i < sugestoes.size() && i < 5; ++i) {
+                        std::cout << sugestoes[i];
+                        if (i < sugestoes.size() - 1 && i < 4) {
+                            std::cout << ", ";
+                        }
+                    }
+                    if (sugestoes.size() > 5) {
+                        std::cout << " ...";
+                    }
+                    std::cout << "\n";
+                    mostrarSugestoes = true;
+                }
+                
+                tagsProcessadas.push_back(tag);
+            }
+        }
+        
+        // Reconstruir string com tags processadas
+        std::string resultado;
+        for (size_t i = 0; i < tagsProcessadas.size(); ++i) {
+            resultado += tagsProcessadas[i];
+            if (i < tagsProcessadas.size() - 1) {
+                resultado += ", ";
+            }
+        }
+        
+        return resultado;
+    }
+    
+    return input;
+}
+
+// ============================================================================
+// MENU PRINCIPAL
+// ============================================================================
 void exibirMenu() {
     std::cout << "\n=== COOKBOOK CLI ===\n";
     std::cout << "1.  Cadastrar receita\n";
@@ -37,6 +132,9 @@ void exibirMenu() {
     std::cout << "Escolha uma opcao: ";
 }
 
+// ============================================================================
+// CRUD DE RECEITAS
+// ============================================================================
 void cadastrarReceita(Database& db) {
     std::cout << "\n--- Cadastrar Receita ---\n";
     
@@ -83,9 +181,7 @@ void cadastrarReceita(Database& db) {
         limparBuffer();
         
         if (resposta == 's' || resposta == 'S') {
-            std::cout << "Digite as tags separadas por virgula: ";
-            std::string tagsInput;
-            std::getline(std::cin, tagsInput);
+            std::string tagsInput = solicitarTagsComAutocompletarSimples(db);
             
             if (!tagsInput.empty()) {
                 std::istringstream iss(tagsInput);
@@ -291,6 +387,9 @@ void excluirReceita(Database& db) {
     }
 }
 
+// ============================================================================
+// GERENCIAMENTO DE TAGS
+// ============================================================================
 void adicionarTagReceita(Database& db) {
     std::cout << "\n--- Adicionar Tag em Receita ---\n";
     std::cout << "Digite o ID da receita: ";
@@ -305,11 +404,8 @@ void adicionarTagReceita(Database& db) {
     }
     
     std::cout << "Receita: " << receita.nome << "\n";
-    std::cout << "Digite as tags separadas por virgula: ";
-    
     limparBuffer();
-    std::string tagsInput;
-    std::getline(std::cin, tagsInput);
+    std::string tagsInput = solicitarTagsComAutocompletarSimples(db);
     
     if (tagsInput.empty()) {
         std::cout << "Nenhuma tag informada.\n";
@@ -416,15 +512,74 @@ void listarTags(Database& db) {
 
 void filtrarReceitasPorTag(Database& db) {
     std::cout << "\n--- Filtrar Receitas por Tag ---\n";
-    std::cout << "Digite o nome da tag: ";
+    std::cout << "Digite o nome da tag (ou ? para ver todas as tags): ";
     
     limparBuffer();
     std::string tagNome;
     std::getline(std::cin, tagNome);
     
+    // Se o usuário digitou ?, mostrar todas as tags
+    if (tagNome == "?") {
+        auto todasTags = db.listAllTags();
+        if (todasTags.empty()) {
+            std::cout << "Nenhuma tag cadastrada.\n";
+            return;
+        }
+        std::cout << "\n--- Tags Disponiveis ---\n";
+        for (size_t i = 0; i < todasTags.size(); ++i) {
+            std::cout << "  " << (i + 1) << ". " << todasTags[i].second;
+            if ((i + 1) % 5 == 0 || i == todasTags.size() - 1) {
+                std::cout << "\n";
+            } else {
+                std::cout << "  |  ";
+            }
+        }
+        std::cout << "\nDigite o nome da tag: ";
+        std::getline(std::cin, tagNome);
+    }
+    
     if (tagNome.empty()) {
         std::cout << "Nome da tag nao pode ser vazio.\n";
         return;
+    }
+    
+    // Se não encontrou exato, buscar por prefixo e mostrar sugestões
+    auto todasTags = db.listAllTags();
+    bool encontrouExato = false;
+    for (const auto& tag : todasTags) {
+        if (tag.second == tagNome) {
+            encontrouExato = true;
+            break;
+        }
+    }
+    
+    if (!encontrouExato) {
+        auto sugestoes = db.getTagsByPrefix(tagNome);
+        if (!sugestoes.empty()) {
+            std::cout << "\nTag \"" << tagNome << "\" nao encontrada. Sugestoes:\n";
+            for (size_t i = 0; i < sugestoes.size() && i < 10; ++i) {
+                std::cout << "  " << (i + 1) << ". " << sugestoes[i] << "\n";
+            }
+            if (sugestoes.size() == 1) {
+                std::cout << "\nUsando tag: " << sugestoes[0] << "\n";
+                tagNome = sugestoes[0];
+            } else if (sugestoes.size() > 1) {
+                std::cout << "\nDigite o nome completo da tag (ou Enter para cancelar): ";
+                std::string novaTag;
+                std::getline(std::cin, novaTag);
+                if (!novaTag.empty()) {
+                    tagNome = novaTag;
+                } else {
+                    return;
+                }
+            } else {
+                std::cout << "Nenhuma tag encontrada.\n";
+                return;
+            }
+        } else {
+            std::cout << "Tag \"" << tagNome << "\" nao encontrada.\n";
+            return;
+        }
     }
     
     auto receitas = db.getReceitasByTag(tagNome);
@@ -473,6 +628,9 @@ void filtrarReceitasPorTag(Database& db) {
     }
 }
 
+// ============================================================================
+// STATUS "FEITA" DAS RECEITAS
+// ============================================================================
 void marcarReceitaComoFeita(Database& db) {
     std::cout << "\n--- Marcar Receita como Feita/Nao Feita ---\n";
     std::cout << "Digite o ID da receita: ";
@@ -549,6 +707,9 @@ void listarReceitasFeitas(Database& db) {
     }
 }
 
+// ============================================================================
+// AVALIAÇÃO DE RECEITAS
+// ============================================================================
 void avaliarReceita(Database& db) {
     std::cout << "\n--- Avaliar Receita ---\n";
     std::cout << "Digite o ID da receita: ";
@@ -646,6 +807,9 @@ void filtrarReceitasPorNota(Database& db) {
     }
 }
 
+// ============================================================================
+// BACKUP E RESTAURAÇÃO
+// ============================================================================
 void fazerBackup(Database& db) {
     std::cout << "\n--- Fazer Backup do Banco de Dados ---\n";
     
@@ -815,6 +979,9 @@ void restaurarBackup(Database& db) {
     }
 }
 
+// ============================================================================
+// FUNÇÃO PRINCIPAL
+// ============================================================================
 int main() {
     Database db("./data/recipes.db");
     
@@ -887,4 +1054,3 @@ int main() {
     db.close();
     return 0;
 }
-
