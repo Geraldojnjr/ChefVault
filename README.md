@@ -235,28 +235,28 @@ cd build
 Os testes cobrem:
 
 #### Funcionalidades Antigas (CRUD Básico)
-- ✅ Criar receita
-- ✅ Listar receitas
-- ✅ Consultar receita por ID
-- ✅ Buscar receita por nome
-- ✅ Excluir receita
+-  Criar receita
+-  Listar receitas
+-  Consultar receita por ID
+-  Buscar receita por nome
+-  Excluir receita
 
 #### Funcionalidades Novas - Tags
-- ✅ Criar tag
-- ✅ Listar tags
-- ✅ Adicionar tag a receita
-- ✅ Remover tag de receita
-- ✅ Filtrar receitas por tag
+-  Criar tag
+-  Listar tags
+-  Adicionar tag a receita
+-  Remover tag de receita
+-  Filtrar receitas por tag
 
 #### Funcionalidades Novas - Status Feita
-- ✅ Marcar receita como feita
-- ✅ Listar receitas feitas
+-  Marcar receita como feita
+-  Listar receitas feitas
 
 #### Funcionalidades Novas - Avaliação
-- ✅ Avaliar receita (1-5)
-- ✅ Validar que apenas receitas feitas podem ser avaliadas
-- ✅ Filtrar receitas por nota
-- ✅ Validar nota inválida (fora do range 1-5)
+-  Avaliar receita (1-5)
+-  Validar que apenas receitas feitas podem ser avaliadas
+-  Filtrar receitas por nota
+-  Validar nota inválida (fora do range 1-5)
 
 **Total: 17 testes automatizados**
 
