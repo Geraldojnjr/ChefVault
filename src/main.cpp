@@ -14,16 +14,18 @@ void limparBuffer() {
 
 void exibirMenu() {
     std::cout << "\n=== COOKBOOK CLI ===\n";
-    std::cout << "1. Cadastrar receita\n";
-    std::cout << "2. Listar receitas\n";
-    std::cout << "3. Consultar detalhes por ID\n";
-    std::cout << "4. Buscar por nome ou parte do nome\n";
-    std::cout << "5. Excluir receita\n";
-    std::cout << "6. Adicionar tag em uma receita\n";
-    std::cout << "7. Remover tag de uma receita\n";
-    std::cout << "8. Listar tags disponiveis\n";
-    std::cout << "9. Filtrar receitas por tag\n";
-    std::cout << "0. Sair\n";
+    std::cout << "1.  Cadastrar receita\n";
+    std::cout << "2.  Listar receitas\n";
+    std::cout << "3.  Consultar detalhes por ID\n";
+    std::cout << "4.  Buscar por nome ou parte do nome\n";
+    std::cout << "5.  Excluir receita\n";
+    std::cout << "6.  Adicionar tag em uma receita\n";
+    std::cout << "7.  Remover tag de uma receita\n";
+    std::cout << "8.  Listar tags disponiveis\n";
+    std::cout << "9.  Filtrar receitas por tag\n";
+    std::cout << "10. Marcar receita como feita/nao feita\n";
+    std::cout << "11. Listar receitas feitas\n";
+    std::cout << "0.  Sair\n";
     std::cout << "Escolha uma opcao: ";
 }
 
@@ -51,6 +53,11 @@ void cadastrarReceita(Database& db) {
     
     std::cout << "Porcoes: ";
     std::cin >> receita.porcoes;
+    
+    std::cout << "Ja foi feita? (s/n): ";
+    char feita;
+    std::cin >> feita;
+    receita.feita = (feita == 's' || feita == 'S');
     
     int receitaId = db.cadastrarReceita(receita);
     
@@ -110,9 +117,10 @@ void listarReceitas(Database& db) {
               << std::setw(15) << "Categoria" 
               << std::setw(10) << "Tempo" 
               << std::setw(10) << "Porcoes" 
+              << std::setw(8) << "Feita"
               << std::setw(30) << "Tags"
               << "\n";
-    std::cout << std::string(100, '-') << "\n";
+    std::cout << std::string(108, '-') << "\n";
     
     for (const auto& r : receitas) {
         std::string tagsStr = "";
@@ -132,6 +140,7 @@ void listarReceitas(Database& db) {
                   << std::setw(15) << (r.categoria.length() > 13 ? r.categoria.substr(0, 12) + ".." : r.categoria)
                   << std::setw(10) << r.tempo 
                   << std::setw(10) << r.porcoes 
+                  << std::setw(8) << (r.feita ? "Sim" : "Nao")
                   << std::setw(30) << (tagsStr.length() > 28 ? tagsStr.substr(0, 27) + ".." : tagsStr)
                   << "\n";
     }
@@ -156,6 +165,7 @@ void consultarPorId(Database& db) {
     std::cout << "Categoria: " << receita.categoria << "\n";
     std::cout << "Tempo: " << receita.tempo << " minutos\n";
     std::cout << "Porcoes: " << receita.porcoes << "\n";
+    std::cout << "Feita: " << (receita.feita ? "Sim" : "Nao") << "\n";
     
     if (!receita.tags.empty()) {
         std::cout << "Tags: ";
@@ -193,9 +203,10 @@ void buscarPorNome(Database& db) {
               << std::setw(15) << "Categoria" 
               << std::setw(10) << "Tempo" 
               << std::setw(10) << "Porcoes" 
+              << std::setw(8) << "Feita"
               << std::setw(30) << "Tags"
               << "\n";
-    std::cout << std::string(100, '-') << "\n";
+    std::cout << std::string(108, '-') << "\n";
     
     for (const auto& r : receitas) {
         std::string tagsStr = "";
@@ -215,6 +226,7 @@ void buscarPorNome(Database& db) {
                   << std::setw(15) << (r.categoria.length() > 13 ? r.categoria.substr(0, 12) + ".." : r.categoria)
                   << std::setw(10) << r.tempo 
                   << std::setw(10) << r.porcoes 
+                  << std::setw(8) << (r.feita ? "Sim" : "Nao")
                   << std::setw(30) << (tagsStr.length() > 28 ? tagsStr.substr(0, 27) + ".." : tagsStr)
                   << "\n";
     }
@@ -398,9 +410,10 @@ void filtrarReceitasPorTag(Database& db) {
               << std::setw(15) << "Categoria" 
               << std::setw(10) << "Tempo" 
               << std::setw(10) << "Porcoes" 
+              << std::setw(8) << "Feita"
               << std::setw(30) << "Tags"
               << "\n";
-    std::cout << std::string(100, '-') << "\n";
+    std::cout << std::string(108, '-') << "\n";
     
     for (const auto& r : receitas) {
         std::string tagsStr = "";
@@ -420,6 +433,79 @@ void filtrarReceitasPorTag(Database& db) {
                   << std::setw(15) << (r.categoria.length() > 13 ? r.categoria.substr(0, 12) + ".." : r.categoria)
                   << std::setw(10) << r.tempo 
                   << std::setw(10) << r.porcoes 
+                  << std::setw(8) << (r.feita ? "Sim" : "Nao")
+                  << std::setw(30) << (tagsStr.length() > 28 ? tagsStr.substr(0, 27) + ".." : tagsStr)
+                  << "\n";
+    }
+}
+
+void marcarReceitaComoFeita(Database& db) {
+    std::cout << "\n--- Marcar Receita como Feita/Nao Feita ---\n";
+    std::cout << "Digite o ID da receita: ";
+    
+    int id;
+    std::cin >> id;
+    
+    Receita receita = db.consultarPorId(id);
+    if (receita.id == 0) {
+        std::cout << "Receita nao encontrada.\n";
+        return;
+    }
+    
+    std::cout << "Receita: " << receita.nome << "\n";
+    std::cout << "Status atual: " << (receita.feita ? "Feita" : "Nao feita") << "\n";
+    std::cout << "Marcar como feita? (s/n): ";
+    
+    char resposta;
+    std::cin >> resposta;
+    bool feita = (resposta == 's' || resposta == 'S');
+    
+    if (db.marcarReceitaComoFeita(id, feita)) {
+        std::cout << "Status atualizado com sucesso!\n";
+    } else {
+        std::cout << "Erro ao atualizar status.\n";
+    }
+}
+
+void listarReceitasFeitas(Database& db) {
+    std::cout << "\n--- Lista de Receitas Feitas ---\n";
+    
+    auto receitas = db.getReceitasFeitas();
+    
+    if (receitas.empty()) {
+        std::cout << "Nenhuma receita feita encontrada.\n";
+        return;
+    }
+    
+    std::cout << std::left << std::setw(5) << "ID" 
+              << std::setw(30) << "Nome" 
+              << std::setw(15) << "Categoria" 
+              << std::setw(10) << "Tempo" 
+              << std::setw(10) << "Porcoes" 
+              << std::setw(8) << "Feita"
+              << std::setw(30) << "Tags"
+              << "\n";
+    std::cout << std::string(108, '-') << "\n";
+    
+    for (const auto& r : receitas) {
+        std::string tagsStr = "";
+        if (!r.tags.empty()) {
+            for (size_t i = 0; i < r.tags.size(); ++i) {
+                tagsStr += r.tags[i];
+                if (i < r.tags.size() - 1) {
+                    tagsStr += ", ";
+                }
+            }
+        } else {
+            tagsStr = "-";
+        }
+        
+        std::cout << std::left << std::setw(5) << r.id 
+                  << std::setw(30) << (r.nome.length() > 28 ? r.nome.substr(0, 27) + ".." : r.nome)
+                  << std::setw(15) << (r.categoria.length() > 13 ? r.categoria.substr(0, 12) + ".." : r.categoria)
+                  << std::setw(10) << r.tempo 
+                  << std::setw(10) << r.porcoes 
+                  << std::setw(8) << (r.feita ? "Sim" : "Nao")
                   << std::setw(30) << (tagsStr.length() > 28 ? tagsStr.substr(0, 27) + ".." : tagsStr)
                   << "\n";
     }
@@ -466,6 +552,12 @@ int main() {
                 break;
             case 9:
                 filtrarReceitasPorTag(db);
+                break;
+            case 10:
+                marcarReceitaComoFeita(db);
+                break;
+            case 11:
+                listarReceitasFeitas(db);
                 break;
             case 0:
                 std::cout << "\nSaindo...\n";

@@ -25,6 +25,8 @@ public:
     Receita consultarPorId(int id);
     std::vector<Receita> buscarPorNome(const std::string& nome);
     bool excluirReceita(int id);
+    bool marcarReceitaComoFeita(int id, bool feita);
+    std::vector<Receita> getReceitasFeitas();
     void close();
     
     // Métodos de tags
