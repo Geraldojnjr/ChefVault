@@ -1,11 +1,15 @@
 #include "../include/Database.h"
 #include "../include/Receita.h"
+#include <sqlite3.h>
 #include <iostream>
 #include <string>
 #include <limits>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <ctime>
+#include <filesystem>
+#include <cctype>
 
 void limparBuffer() {
     std::cin.clear();
@@ -27,6 +31,8 @@ void exibirMenu() {
     std::cout << "11. Listar receitas feitas\n";
     std::cout << "12. Avaliar receita (1-5)\n";
     std::cout << "13. Filtrar receitas por nota\n";
+    std::cout << "98. Fazer backup do banco de dados\n";
+    std::cout << "99. Restaurar backup do banco de dados\n";
     std::cout << "0.  Sair\n";
     std::cout << "Escolha uma opcao: ";
 }
@@ -640,6 +646,175 @@ void filtrarReceitasPorNota(Database& db) {
     }
 }
 
+void fazerBackup(Database& db) {
+    std::cout << "\n--- Fazer Backup do Banco de Dados ---\n";
+    
+    std::time_t now = std::time(nullptr);
+    std::tm* timeinfo = std::localtime(&now);
+    char timestamp[20];
+    std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", timeinfo);
+    
+    std::string nomePadrao = "./backups/recipes_backup_" + std::string(timestamp) + ".db";
+    
+    std::cout << "Caminho do backup (Enter para usar: " << nomePadrao << "): ";
+    limparBuffer();
+    std::string caminhoBackup;
+    std::getline(std::cin, caminhoBackup);
+    
+    if (caminhoBackup.empty()) {
+        caminhoBackup = nomePadrao;
+    }
+    
+    std::cout << "Fazendo backup para: " << caminhoBackup << "\n";
+    
+    if (db.fazerBackup(caminhoBackup)) {
+        if (std::filesystem::exists(caminhoBackup)) {
+            auto tamanho = std::filesystem::file_size(caminhoBackup);
+            std::cout << "Backup concluido com sucesso!\n";
+            std::cout << "Tamanho do arquivo: " << tamanho << " bytes\n";
+            
+            sqlite3* verifyDb = nullptr;
+            if (sqlite3_open_v2(caminhoBackup.c_str(), &verifyDb, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK) {
+                sqlite3_stmt* stmt;
+                const char* sql = "SELECT COUNT(*) FROM receitas";
+                if (sqlite3_prepare_v2(verifyDb, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+                    if (sqlite3_step(stmt) == SQLITE_ROW) {
+                        int count = sqlite3_column_int(stmt, 0);
+                        std::cout << "Receitas no backup: " << count << "\n";
+                    }
+                    sqlite3_finalize(stmt);
+                }
+                sqlite3_close(verifyDb);
+            }
+        } else {
+            std::cout << "Backup concluido, mas arquivo nao encontrado.\n";
+        }
+    } else {
+        std::cout << "Erro ao fazer backup.\n";
+    }
+}
+
+std::vector<std::filesystem::path> listarBackups() {
+    std::vector<std::filesystem::path> backups;
+    std::string backupDir = "./backups";
+    
+    if (!std::filesystem::exists(backupDir)) {
+        std::cout << "\nDiretorio de backups nao encontrado: " << backupDir << "\n";
+        return backups;
+    }
+    
+    for (const auto& entry : std::filesystem::directory_iterator(backupDir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".db") {
+            backups.push_back(entry.path());
+        }
+    }
+    
+    if (backups.empty()) {
+        std::cout << "\nNenhum backup encontrado em " << backupDir << "\n";
+        return backups;
+    }
+    
+    std::sort(backups.begin(), backups.end(), 
+        [](const std::filesystem::path& a, const std::filesystem::path& b) {
+            return std::filesystem::last_write_time(a) > std::filesystem::last_write_time(b);
+        });
+    
+    std::cout << "\n--- Backups Disponiveis ---\n";
+    std::cout << std::left << std::setw(5) << "#" 
+              << std::setw(50) << "Arquivo" 
+              << std::setw(15) << "Tamanho" 
+              << "\n";
+    std::cout << std::string(70, '-') << "\n";
+    
+    for (size_t i = 0; i < backups.size(); ++i) {
+        auto tamanho = std::filesystem::file_size(backups[i]);
+        std::string tamanhoStr = std::to_string(tamanho) + " bytes";
+        if (tamanho > 1024) {
+            tamanhoStr = std::to_string(tamanho / 1024) + " KB";
+        }
+        if (tamanho > 1024 * 1024) {
+            tamanhoStr = std::to_string(tamanho / (1024 * 1024)) + " MB";
+        }
+        
+        std::cout << std::left << std::setw(5) << (i + 1)
+                  << std::setw(50) << backups[i].filename().string()
+                  << std::setw(15) << tamanhoStr
+                  << "\n";
+    }
+    
+    return backups;
+}
+
+void restaurarBackup(Database& db) {
+    std::cout << "\n--- Restaurar Backup do Banco de Dados ---\n";
+    std::cout << "ATENCAO: Esta operacao substituira o banco de dados atual!\n";
+    
+    auto backups = listarBackups();
+    
+    if (backups.empty()) {
+        return;
+    }
+    
+    std::cout << "\nDigite o numero do backup (1-" << backups.size() << ") ou o caminho completo: ";
+    limparBuffer();
+    std::string entrada;
+    std::getline(std::cin, entrada);
+    
+    if (entrada.empty()) {
+        std::cout << "Operacao cancelada.\n";
+        return;
+    }
+    
+    std::string caminhoBackup;
+    
+    // Verificar se é um número
+    bool ehNumero = true;
+    for (char c : entrada) {
+        if (!std::isdigit(c)) {
+            ehNumero = false;
+            break;
+        }
+    }
+    
+    if (ehNumero) {
+        int numero = std::stoi(entrada);
+        if (numero >= 1 && numero <= static_cast<int>(backups.size())) {
+            caminhoBackup = backups[numero - 1].string();
+            std::cout << "Backup selecionado: " << backups[numero - 1].filename().string() << "\n";
+        } else {
+            std::cout << "Numero invalido. Deve estar entre 1 e " << backups.size() << ".\n";
+            return;
+        }
+    } else {
+        // É um caminho completo
+        caminhoBackup = entrada;
+    }
+    
+    if (!std::filesystem::exists(caminhoBackup)) {
+        std::cout << "Arquivo de backup nao encontrado: " << caminhoBackup << "\n";
+        return;
+    }
+    
+    std::cout << "Tem certeza que deseja restaurar o backup? (s/n): ";
+    char confirmacao;
+    std::cin >> confirmacao;
+    
+    if (confirmacao != 's' && confirmacao != 'S') {
+        std::cout << "Operacao cancelada.\n";
+        return;
+    }
+    
+    std::cout << "Restaurando backup de: " << caminhoBackup << "\n";
+    
+    if (db.restaurarBackup(caminhoBackup)) {
+        std::cout << "\nBackup restaurado com sucesso!\n";
+        std::cout << "O banco de dados foi restaurado e a conexao foi reaberta.\n";
+        std::cout << "Voce pode agora listar as receitas para verificar.\n";
+    } else {
+        std::cout << "Erro ao restaurar backup.\n";
+    }
+}
+
 int main() {
     Database db("./data/recipes.db");
     
@@ -693,6 +868,12 @@ int main() {
                 break;
             case 13:
                 filtrarReceitasPorNota(db);
+                break;
+            case 98:
+                fazerBackup(db);
+                break;
+            case 99:
+                restaurarBackup(db);
                 break;
             case 0:
                 std::cout << "\nSaindo...\n";

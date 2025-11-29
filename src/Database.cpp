@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <filesystem>
+#include <thread>
+#include <chrono>
 
 Database::Database(const std::string& path) : dbPath(path), db(nullptr) {
     std::filesystem::path dir = std::filesystem::path(path).parent_path();
@@ -69,7 +71,7 @@ bool Database::createTable() {
         )";
         executeQuerySilent(alterQueryNota);
     }
-    =
+    
     if (!columnExists("receitas", "imagem")) {
         std::string alterQueryImagem = R"(
             ALTER TABLE receitas ADD COLUMN imagem TEXT
@@ -601,6 +603,224 @@ std::vector<std::pair<int, std::string>> Database::listAllTags() {
     
     sqlite3_finalize(stmt);
     return tags;
+}
+
+bool Database::fazerBackup(const std::string& caminhoBackup) {
+    if (!db) {
+        std::cerr << "Banco de dados nao esta aberto." << std::endl;
+        return false;
+    }
+    
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3* backupDb = nullptr;
+    
+    std::filesystem::path backupPath(caminhoBackup);
+    std::filesystem::path backupDir = backupPath.parent_path();
+    if (!backupDir.empty() && !std::filesystem::exists(backupDir)) {
+        std::filesystem::create_directories(backupDir);
+    }
+    
+    sqlite3_exec(sqliteDb, "COMMIT", nullptr, nullptr, nullptr);
+    sqlite3_exec(sqliteDb, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr);
+    sqlite3_exec(sqliteDb, "COMMIT", nullptr, nullptr, nullptr);
+    
+    sqlite3_wal_checkpoint_v2(sqliteDb, nullptr, SQLITE_CHECKPOINT_FULL, nullptr, nullptr);
+    
+    sqlite3_stmt* checkStmt;
+    const char* countSql = "SELECT COUNT(*) FROM receitas";
+    int countAntes = 0;
+    if (sqlite3_prepare_v2(sqliteDb, countSql, -1, &checkStmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(checkStmt) == SQLITE_ROW) {
+            countAntes = sqlite3_column_int(checkStmt, 0);
+        }
+        sqlite3_finalize(checkStmt);
+    }
+    
+    if (std::filesystem::exists(caminhoBackup)) {
+        std::filesystem::remove(caminhoBackup);
+    }
+    
+    if (sqlite3_open(caminhoBackup.c_str(), &backupDb) != SQLITE_OK) {
+        std::cerr << "Erro ao criar arquivo de backup: " << sqlite3_errmsg(backupDb) << std::endl;
+        if (backupDb) {
+            sqlite3_close(backupDb);
+        }
+        return false;
+    }
+    
+    sqlite3_exec(backupDb, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+    
+    sqlite3_backup* backup = sqlite3_backup_init(backupDb, "main", sqliteDb, "main");
+    if (!backup) {
+        std::cerr << "Erro ao inicializar backup: " << sqlite3_errmsg(backupDb) << std::endl;
+        sqlite3_close(backupDb);
+        return false;
+    }
+    
+    int result = sqlite3_backup_step(backup, -1);
+    if (result != SQLITE_DONE) {
+        std::cerr << "Erro durante backup: " << sqlite3_errmsg(backupDb) << std::endl;
+        sqlite3_backup_finish(backup);
+        sqlite3_close(backupDb);
+        return false;
+    }
+    
+    result = sqlite3_backup_finish(backup);
+    if (result != SQLITE_OK) {
+        std::cerr << "Erro ao finalizar backup: " << sqlite3_errmsg(backupDb) << std::endl;
+        sqlite3_close(backupDb);
+        return false;
+    }
+    
+    sqlite3_exec(backupDb, "PRAGMA synchronous = FULL;", nullptr, nullptr, nullptr);
+    
+    sqlite3_close(backupDb);
+    
+    if (!std::filesystem::exists(caminhoBackup)) {
+        std::cerr << "Arquivo de backup nao foi criado." << std::endl;
+        return false;
+    }
+    
+    auto tamanho = std::filesystem::file_size(caminhoBackup);
+    if (tamanho == 0) {
+        std::cerr << "Arquivo de backup esta vazio." << std::endl;
+        return false;
+    }
+    
+    sqlite3* verifyDb = nullptr;
+    if (sqlite3_open_v2(caminhoBackup.c_str(), &verifyDb, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK) {
+        sqlite3_stmt* verifyStmt;
+        const char* verifyCountSql = "SELECT COUNT(*) FROM receitas";
+        int countBackup = 0;
+        if (sqlite3_prepare_v2(verifyDb, verifyCountSql, -1, &verifyStmt, nullptr) == SQLITE_OK) {
+            if (sqlite3_step(verifyStmt) == SQLITE_ROW) {
+                countBackup = sqlite3_column_int(verifyStmt, 0);
+            }
+            sqlite3_finalize(verifyStmt);
+        }
+        sqlite3_close(verifyDb);
+        
+        if (countBackup != countAntes) {
+            std::cerr << "Aviso: Numero de receitas no backup (" << countBackup 
+                      << ") difere do banco original (" << countAntes << ")." << std::endl;
+        }
+    }
+    
+    return true;
+}
+
+bool Database::restaurarBackup(const std::string& caminhoBackup) {
+    if (!std::filesystem::exists(caminhoBackup)) {
+        std::cerr << "Arquivo de backup nao encontrado: " << caminhoBackup << std::endl;
+        return false;
+    }
+    
+    auto tamanho = std::filesystem::file_size(caminhoBackup);
+    if (tamanho == 0) {
+        std::cerr << "Arquivo de backup esta vazio." << std::endl;
+        return false;
+    }
+    
+    sqlite3* backupDb = nullptr;
+    if (sqlite3_open_v2(caminhoBackup.c_str(), &backupDb, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao abrir arquivo de backup: " << sqlite3_errmsg(backupDb) << std::endl;
+        if (backupDb) {
+            sqlite3_close(backupDb);
+        }
+        return false;
+    }
+    
+    sqlite3_stmt* stmt;
+    const char* checkSql = "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('receitas', 'tags', 'receitas_tags')";
+    if (sqlite3_prepare_v2(backupDb, checkSql, -1, &stmt, nullptr) == SQLITE_OK) {
+        int count = 0;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            count++;
+        }
+        sqlite3_finalize(stmt);
+        if (count < 3) {
+            std::cerr << "Arquivo de backup incompleto. Faltam tabelas essenciais." << std::endl;
+            sqlite3_close(backupDb);
+            return false;
+        }
+    }
+    sqlite3_close(backupDb);
+    
+    if (db) {
+        sqlite3_close((sqlite3*)db);
+        db = nullptr;
+    }
+    
+    std::string backupSeguranca = dbPath + ".pre_restore";
+    if (std::filesystem::exists(dbPath)) {
+        try {
+            std::filesystem::copy_file(dbPath, backupSeguranca, std::filesystem::copy_options::overwrite_existing);
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "Aviso: Nao foi possivel criar backup de seguranca: " << e.what() << std::endl;
+        }
+    }
+    
+    try {
+        std::filesystem::copy_file(caminhoBackup, dbPath, std::filesystem::copy_options::overwrite_existing);
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Erro ao copiar arquivo de backup: " << e.what() << std::endl;
+        if (std::filesystem::exists(backupSeguranca)) {
+            std::filesystem::copy_file(backupSeguranca, dbPath, std::filesystem::copy_options::overwrite_existing);
+        }
+        return false;
+    }
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    
+    if (sqlite3_open_v2(dbPath.c_str(), (sqlite3**)&db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao reabrir banco de dados: " << sqlite3_errmsg((sqlite3*)db) << std::endl;
+        return false;
+    }
+    
+    if (!executeQuery("PRAGMA foreign_keys = ON;")) {
+        std::cerr << "Erro ao habilitar foreign keys" << std::endl;
+        return false;
+    }
+    
+    executeQuery("PRAGMA journal_mode = DELETE;");
+    executeQuery("PRAGMA synchronous = FULL;");
+    
+    sqlite3* sqliteDb = (sqlite3*)db;
+    
+    const char* verifySql = "SELECT COUNT(*) FROM receitas";
+    int countReceitas = 0;
+    if (sqlite3_prepare_v2(sqliteDb, verifySql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            countReceitas = sqlite3_column_int(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    const char* countTagsSql = "SELECT COUNT(*) FROM tags";
+    int countTags = 0;
+    if (sqlite3_prepare_v2(sqliteDb, countTagsSql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            countTags = sqlite3_column_int(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    const char* countRelSql = "SELECT COUNT(*) FROM receitas_tags";
+    int countRel = 0;
+    if (sqlite3_prepare_v2(sqliteDb, countRelSql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            countRel = sqlite3_column_int(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    sqlite3_exec(sqliteDb, "PRAGMA synchronous = FULL;", nullptr, nullptr, nullptr);
+    sqlite3_exec(sqliteDb, "PRAGMA journal_mode = DELETE;", nullptr, nullptr, nullptr);
+    
+    std::cout << "Restaurado: " << countReceitas << " receitas, " 
+              << countTags << " tags, " << countRel << " relacionamentos." << std::endl;
+    
+    return true;
 }
 
 void Database::close() {

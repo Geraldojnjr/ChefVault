@@ -31,6 +31,8 @@ public:
     std::vector<Receita> getReceitasFeitas();
     bool avaliarReceita(int id, int nota);
     std::vector<Receita> getReceitasPorNota(int nota);
+    bool fazerBackup(const std::string& caminhoBackup);
+    bool restaurarBackup(const std::string& caminhoBackup);
     void close();
     
     // Métodos de tags
