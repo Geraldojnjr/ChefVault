@@ -4,6 +4,7 @@
 #include "Receita.h"
 #include <vector>
 #include <string>
+#include <utility>
 
 class Database {
 private:
@@ -12,18 +13,27 @@ private:
 
     bool executeQuery(const std::string& query);
     bool createTable();
+    bool createTagsTables();
 
 public:
     Database(const std::string& path);
     ~Database();
 
     bool initialize();
-    bool cadastrarReceita(const Receita& receita);
+    int cadastrarReceita(const Receita& receita);
     std::vector<Receita> listarReceitas();
     Receita consultarPorId(int id);
     std::vector<Receita> buscarPorNome(const std::string& nome);
     bool excluirReceita(int id);
     void close();
+    
+    // Métodos de tags
+    int createTag(const std::string& nome);
+    std::vector<std::string> getTagsFromReceita(int receitaId);
+    void addTagToReceita(int receitaId, int tagId);
+    void removeTagFromReceita(int receitaId, int tagId);
+    std::vector<Receita> getReceitasByTag(const std::string& nomeTag);
+    std::vector<std::pair<int, std::string>> listAllTags();
 };
 
 #endif // DATABASE_H

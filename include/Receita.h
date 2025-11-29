@@ -2,6 +2,7 @@
 #define RECEITA_H
 
 #include <string>
+#include <vector>
 
 struct Receita {
     int id;
@@ -11,6 +12,7 @@ struct Receita {
     int tempo;
     std::string categoria;
     int porcoes;
+    std::vector<std::string> tags;
 
     Receita() : id(0), tempo(0), porcoes(0) {}
     
