@@ -111,24 +111,72 @@ std::string solicitarTagsComAutocompletarSimples(Database& db) {
 // ============================================================================
 // MENU PRINCIPAL
 // ============================================================================
-void exibirMenu() {
-    std::cout << "\n=== COOKBOOK CLI ===\n";
-    std::cout << "1.  Cadastrar receita\n";
-    std::cout << "2.  Listar receitas\n";
-    std::cout << "3.  Consultar detalhes por ID\n";
-    std::cout << "4.  Buscar por nome ou parte do nome\n";
-    std::cout << "5.  Excluir receita\n";
-    std::cout << "6.  Adicionar tag em uma receita\n";
-    std::cout << "7.  Remover tag de uma receita\n";
-    std::cout << "8.  Listar tags disponiveis\n";
-    std::cout << "9.  Filtrar receitas por tag\n";
-    std::cout << "10. Marcar receita como feita/nao feita\n";
-    std::cout << "11. Listar receitas feitas\n";
-    std::cout << "12. Avaliar receita (1-5)\n";
-    std::cout << "13. Filtrar receitas por nota\n";
-    std::cout << "98. Fazer backup do banco de dados\n";
-    std::cout << "99. Restaurar backup do banco de dados\n";
-    std::cout << "0.  Sair\n";
+void exibirMenuPrincipal() {
+    std::cout << "\n" << std::string(50, '=') << "\n";
+    std::cout << "           COOKBOOK CLI\n";
+    std::cout << std::string(50, '=') << "\n\n";
+    
+    std::cout << "  1. Receitas\n";
+    std::cout << "  2. Tags\n";
+    std::cout << "  3. Status e Avaliacao\n";
+    std::cout << "  4. Sistema\n";
+    std::cout << "  0. Sair\n";
+    std::cout << std::string(50, '-') << "\n";
+    std::cout << "Escolha uma opcao: ";
+}
+
+void exibirSubmenuReceitas() {
+    std::cout << "\n" << std::string(50, '=') << "\n";
+    std::cout << "         RECEITAS\n";
+    std::cout << std::string(50, '=') << "\n\n";
+    
+    std::cout << "  1. Cadastrar receita\n";
+    std::cout << "  2. Listar receitas\n";
+    std::cout << "  3. Consultar detalhes por ID\n";
+    std::cout << "  4. Buscar por nome ou parte do nome\n";
+    std::cout << "  5. Excluir receita\n";
+    std::cout << "  0. Voltar ao menu principal\n";
+    std::cout << std::string(50, '-') << "\n";
+    std::cout << "Escolha uma opcao: ";
+}
+
+void exibirSubmenuTags() {
+    std::cout << "\n" << std::string(50, '=') << "\n";
+    std::cout << "            TAGS\n";
+    std::cout << std::string(50, '=') << "\n\n";
+    
+    std::cout << "  1. Adicionar tag em uma receita\n";
+    std::cout << "  2. Remover tag de uma receita\n";
+    std::cout << "  3. Listar tags disponiveis\n";
+    std::cout << "  4. Filtrar receitas por tag\n";
+    std::cout << "  0. Voltar ao menu principal\n";
+    std::cout << std::string(50, '-') << "\n";
+    std::cout << "Escolha uma opcao: ";
+}
+
+void exibirSubmenuStatusAvaliacao() {
+    std::cout << "\n" << std::string(50, '=') << "\n";
+    std::cout << "    STATUS E AVALIACAO\n";
+    std::cout << std::string(50, '=') << "\n\n";
+    
+    std::cout << "  1. Marcar receita como feita/nao feita\n";
+    std::cout << "  2. Listar receitas feitas\n";
+    std::cout << "  3. Avaliar receita (1-5)\n";
+    std::cout << "  4. Filtrar receitas por nota\n";
+    std::cout << "  0. Voltar ao menu principal\n";
+    std::cout << std::string(50, '-') << "\n";
+    std::cout << "Escolha uma opcao: ";
+}
+
+void exibirSubmenuSistema() {
+    std::cout << "\n" << std::string(50, '=') << "\n";
+    std::cout << "          SISTEMA\n";
+    std::cout << std::string(50, '=') << "\n\n";
+    
+    std::cout << "  1. Fazer backup do banco de dados\n";
+    std::cout << "  2. Restaurar backup do banco de dados\n";
+    std::cout << "  0. Voltar ao menu principal\n";
+    std::cout << std::string(50, '-') << "\n";
     std::cout << "Escolha uma opcao: ";
 }
 
@@ -1043,65 +1091,136 @@ int main() {
     }
     
     int opcao;
+    bool sair = false;
     
     do {
-        exibirMenu();
+        exibirMenuPrincipal();
         std::cin >> opcao;
+        limparBuffer();
         
         switch (opcao) {
-            case 1:
-                cadastrarReceita(db);
+            case 1: { // Receitas
+                int subOpcao;
+                do {
+                    exibirSubmenuReceitas();
+                    std::cin >> subOpcao;
+                    limparBuffer();
+                    
+                    switch (subOpcao) {
+                        case 1:
+                            cadastrarReceita(db);
+                            break;
+                        case 2:
+                            listarReceitas(db);
+                            break;
+                        case 3:
+                            consultarPorId(db);
+                            break;
+                        case 4:
+                            buscarPorNome(db);
+                            break;
+                        case 5:
+                            excluirReceita(db);
+                            break;
+                        case 0:
+                            break;
+                        default:
+                            std::cout << "\nOpcao invalida!\n";
+                            break;
+                    }
+                } while (subOpcao != 0);
                 break;
-            case 2:
-                listarReceitas(db);
+            }
+            case 2: { // Tags
+                int subOpcao;
+                do {
+                    exibirSubmenuTags();
+                    std::cin >> subOpcao;
+                    limparBuffer();
+                    
+                    switch (subOpcao) {
+                        case 1:
+                            adicionarTagReceita(db);
+                            break;
+                        case 2:
+                            removerTagReceita(db);
+                            break;
+                        case 3:
+                            listarTags(db);
+                            break;
+                        case 4:
+                            filtrarReceitasPorTag(db);
+                            break;
+                        case 0:
+                            break;
+                        default:
+                            std::cout << "\nOpcao invalida!\n";
+                            break;
+                    }
+                } while (subOpcao != 0);
                 break;
-            case 3:
-                consultarPorId(db);
+            }
+            case 3: { // Status e Avaliação
+                int subOpcao;
+                do {
+                    exibirSubmenuStatusAvaliacao();
+                    std::cin >> subOpcao;
+                    limparBuffer();
+                    
+                    switch (subOpcao) {
+                        case 1:
+                            marcarReceitaComoFeita(db);
+                            break;
+                        case 2:
+                            listarReceitasFeitas(db);
+                            break;
+                        case 3:
+                            avaliarReceita(db);
+                            break;
+                        case 4:
+                            filtrarReceitasPorNota(db);
+                            break;
+                        case 0:
+                            break;
+                        default:
+                            std::cout << "\nOpcao invalida!\n";
+                            break;
+                    }
+                } while (subOpcao != 0);
                 break;
-            case 4:
-                buscarPorNome(db);
+            }
+            case 4: { // Sistema
+                int subOpcao;
+                do {
+                    exibirSubmenuSistema();
+                    std::cin >> subOpcao;
+                    limparBuffer();
+                    
+                    switch (subOpcao) {
+                        case 1:
+                            fazerBackup(db);
+                            break;
+                        case 2:
+                            restaurarBackup(db);
+                            break;
+                        case 0:
+                            break;
+                        default:
+                            std::cout << "\nOpcao invalida!\n";
+                            break;
+                    }
+                } while (subOpcao != 0);
                 break;
-            case 5:
-                excluirReceita(db);
-                break;
-            case 6:
-                adicionarTagReceita(db);
-                break;
-            case 7:
-                removerTagReceita(db);
-                break;
-            case 8:
-                listarTags(db);
-                break;
-            case 9:
-                filtrarReceitasPorTag(db);
-                break;
-            case 10:
-                marcarReceitaComoFeita(db);
-                break;
-            case 11:
-                listarReceitasFeitas(db);
-                break;
-            case 12:
-                avaliarReceita(db);
-                break;
-            case 13:
-                filtrarReceitasPorNota(db);
-                break;
-            case 98:
-                fazerBackup(db);
-                break;
-            case 99:
-                restaurarBackup(db);
-                break;
+            }
             case 0:
                 std::cout << "\nSaindo...\n";
+                sair = true;
                 break;
             default:
                 std::cout << "\nOpcao invalida!\n";
                 break;
         }
-    } while (opcao != 0);
+    } while (!sair);
     
     db.close();
     return 0;
