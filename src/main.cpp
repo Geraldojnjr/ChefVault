@@ -62,6 +62,10 @@ void cadastrarReceita(Database& db) {
     receita.feita = (feita == 's' || feita == 'S');
     receita.nota = 0;
     
+    std::cout << "Caminho da imagem (ou Enter para pular): ";
+    limparBuffer();
+    std::getline(std::cin, receita.imagem);
+    
     int receitaId = db.cadastrarReceita(receita);
     
     if (receitaId > 0) {
@@ -177,6 +181,10 @@ void consultarPorId(Database& db) {
         std::cout << "Nota: " << receita.nota << "/5\n";
     } else if (receita.feita) {
         std::cout << "Nota: Nao avaliada\n";
+    }
+    
+    if (!receita.imagem.empty()) {
+        std::cout << "Imagem: " << receita.imagem << "\n";
     }
     
     if (!receita.tags.empty()) {

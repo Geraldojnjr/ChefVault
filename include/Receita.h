@@ -14,6 +14,7 @@ struct Receita {
     int porcoes;
     bool feita;
     int nota;
+    std::string imagem; // Caminho para o arquivo de imagem
     std::vector<std::string> tags;
 
     Receita() : id(0), tempo(0), porcoes(0), feita(false), nota(0) {}

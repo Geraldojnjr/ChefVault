@@ -45,7 +45,8 @@ bool Database::createTable() {
             categoria TEXT,
             porcoes INTEGER,
             feita INTEGER DEFAULT 0,
-            nota INTEGER DEFAULT 0
+            nota INTEGER DEFAULT 0,
+            imagem TEXT
         )
     )";
     
@@ -67,6 +68,13 @@ bool Database::createTable() {
             ALTER TABLE receitas ADD COLUMN nota INTEGER DEFAULT 0
         )";
         executeQuerySilent(alterQueryNota);
+    }
+    =
+    if (!columnExists("receitas", "imagem")) {
+        std::string alterQueryImagem = R"(
+            ALTER TABLE receitas ADD COLUMN imagem TEXT
+        )";
+        executeQuerySilent(alterQueryImagem);
     }
     
     return true;
@@ -155,7 +163,7 @@ int Database::cadastrarReceita(const Receita& receita) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "INSERT INTO receitas (nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    const char* sql = "INSERT INTO receitas (nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -170,6 +178,7 @@ int Database::cadastrarReceita(const Receita& receita) {
     sqlite3_bind_int(stmt, 6, receita.porcoes);
     sqlite3_bind_int(stmt, 7, receita.feita ? 1 : 0);
     sqlite3_bind_int(stmt, 8, receita.nota);
+    sqlite3_bind_text(stmt, 9, receita.imagem.empty() ? nullptr : receita.imagem.c_str(), -1, SQLITE_STATIC);
     
     if (sqlite3_step(stmt) != SQLITE_DONE) {
         std::cerr << "Erro ao inserir receita: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -188,7 +197,7 @@ std::vector<Receita> Database::listarReceitas() {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota FROM receitas ORDER BY id";
+    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem FROM receitas ORDER BY id";
     
     if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -206,6 +215,8 @@ std::vector<Receita> Database::listarReceitas() {
         r.porcoes = sqlite3_column_int(stmt, 6);
         r.feita = (sqlite3_column_int(stmt, 7) == 1);
         r.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
         receitas.push_back(r);
     }
@@ -219,7 +230,7 @@ Receita Database::consultarPorId(int id) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota FROM receitas WHERE id = ?";
+    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem FROM receitas WHERE id = ?";
     
     if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -238,6 +249,8 @@ Receita Database::consultarPorId(int id) {
         receita.porcoes = sqlite3_column_int(stmt, 6);
         receita.feita = (sqlite3_column_int(stmt, 7) == 1);
         receita.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        receita.imagem = (img ? std::string(img) : "");
         receita.tags = getTagsFromReceita(receita.id);
     }
     
@@ -250,7 +263,7 @@ std::vector<Receita> Database::buscarPorNome(const std::string& nome) {
     sqlite3* sqlite3Db = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota FROM receitas WHERE nome LIKE ? ORDER BY id";
+    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem FROM receitas WHERE nome LIKE ? ORDER BY id";
     
     if (sqlite3_prepare_v2(sqlite3Db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqlite3Db) << std::endl;
@@ -271,6 +284,8 @@ std::vector<Receita> Database::buscarPorNome(const std::string& nome) {
         r.porcoes = sqlite3_column_int(stmt, 6);
         r.feita = (sqlite3_column_int(stmt, 7) == 1);
         r.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
         receitas.push_back(r);
     }
@@ -406,7 +421,7 @@ std::vector<Receita> Database::getReceitasByTag(const std::string& nomeTag) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT DISTINCT r.id, r.nome, r.ingredientes, r.preparo, r.tempo, r.categoria, r.porcoes, r.feita, r.nota "
+    const char* sql = "SELECT DISTINCT r.id, r.nome, r.ingredientes, r.preparo, r.tempo, r.categoria, r.porcoes, r.feita, r.nota, r.imagem "
                       "FROM receitas r "
                       "INNER JOIN receitas_tags rt ON r.id = rt.receita_id "
                       "INNER JOIN tags t ON rt.tag_id = t.id "
@@ -430,6 +445,8 @@ std::vector<Receita> Database::getReceitasByTag(const std::string& nomeTag) {
         r.porcoes = sqlite3_column_int(stmt, 6);
         r.feita = (sqlite3_column_int(stmt, 7) == 1);
         r.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
         receitas.push_back(r);
     }
@@ -463,7 +480,7 @@ std::vector<Receita> Database::getReceitasFeitas() {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota FROM receitas WHERE feita = 1 ORDER BY id";
+    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem FROM receitas WHERE feita = 1 ORDER BY id";
     
     if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -481,6 +498,8 @@ std::vector<Receita> Database::getReceitasFeitas() {
         r.porcoes = sqlite3_column_int(stmt, 6);
         r.feita = (sqlite3_column_int(stmt, 7) == 1);
         r.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
         receitas.push_back(r);
     }
@@ -530,7 +549,7 @@ std::vector<Receita> Database::getReceitasPorNota(int nota) {
     sqlite3* sqliteDb = (sqlite3*)db;
     sqlite3_stmt* stmt;
     
-    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota FROM receitas WHERE nota = ? AND feita = 1 ORDER BY id";
+    const char* sql = "SELECT id, nome, ingredientes, preparo, tempo, categoria, porcoes, feita, nota, imagem FROM receitas WHERE nota = ? AND feita = 1 ORDER BY id";
     
     if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
@@ -550,6 +569,8 @@ std::vector<Receita> Database::getReceitasPorNota(int nota) {
         r.porcoes = sqlite3_column_int(stmt, 6);
         r.feita = (sqlite3_column_int(stmt, 7) == 1);
         r.nota = sqlite3_column_int(stmt, 8);
+        const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
         receitas.push_back(r);
     }
