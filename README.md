@@ -5,7 +5,11 @@ Sistema de gerenciamento de receitas em linha de comando (CLI) desenvolvido em C
 ## Características
 
 - CRUD completo de receitas
-- Banco de dados SQLite persistente
+- Sistema de tags filtráveis (múltiplas tags por receita)
+- Marcar receitas como feitas
+- Sistema de avaliação (notas de 1 a 5)
+- Filtros avançados (por tag, por nota, receitas feitas)
+- Banco de dados SQLite persistente com foreign keys
 - Interface CLI interativa
 - Containerização com Docker
 - Build com CMake
@@ -123,17 +127,34 @@ docker-compose down
 
 O menu oferece as seguintes opções:
 
+### Gerenciamento Básico
 1. **Cadastrar receita**: Adiciona uma nova receita ao banco de dados
-2. **Listar receitas**: Exibe todas as receitas cadastradas
+   - Permite adicionar tags durante o cadastro
+   - Permite marcar se a receita já foi feita
+2. **Listar receitas**: Exibe todas as receitas cadastradas (com tags, status e nota)
 3. **Consultar detalhes por ID**: Mostra informações completas de uma receita específica
 4. **Buscar por nome ou parte do nome**: Busca receitas que contenham o termo pesquisado
 5. **Excluir receita**: Remove uma receita do banco de dados
+
+### Gerenciamento de Tags
+6. **Adicionar tag em uma receita**: Associa uma ou múltiplas tags a uma receita existente
+7. **Remover tag de uma receita**: Remove uma tag específica de uma receita
+8. **Listar tags disponíveis**: Exibe todas as tags cadastradas no sistema
+9. **Filtrar receitas por tag**: Lista todas as receitas que possuem uma tag específica
+
+### Status e Avaliação
+10. **Marcar receita como feita/não feita**: Altera o status de conclusão da receita
+11. **Listar receitas feitas**: Filtra e exibe apenas receitas que já foram preparadas
+12. **Avaliar receita (1-5)**: Atribui uma nota de 1 a 5 para receitas que foram feitas
+13. **Filtrar receitas por nota**: Lista receitas feitas com uma nota específica
+
 0. **Sair**: Encerra o programa
 
 ## Estrutura do Banco de Dados
 
 O banco de dados SQLite é criado automaticamente em `./data/recipes.db` com a seguinte estrutura:
 
+### Tabela `receitas`
 ```sql
 CREATE TABLE receitas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,9 +163,35 @@ CREATE TABLE receitas (
     preparo TEXT NOT NULL,
     tempo INTEGER,
     categoria TEXT,
-    porcoes INTEGER
+    porcoes INTEGER,
+    feita INTEGER DEFAULT 0,
+    nota INTEGER DEFAULT 0
 );
 ```
+
+### Tabela `tags`
+```sql
+CREATE TABLE tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL
+);
+```
+
+### Tabela `receitas_tags` (relacionamento muitos-para-muitos)
+```sql
+CREATE TABLE receitas_tags (
+    receita_id INTEGER,
+    tag_id INTEGER,
+    PRIMARY KEY (receita_id, tag_id),
+    FOREIGN KEY (receita_id) REFERENCES receitas(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+```
+
+### Características
+- **Foreign keys habilitadas**: Integridade referencial garantida
+- **CASCADE**: Exclusão automática de relacionamentos ao deletar receitas ou tags
+- **Migration automática**: Colunas novas são adicionadas automaticamente em bancos existentes
 
 ## Persistência de Dados
 
@@ -155,12 +202,76 @@ CREATE TABLE receitas (
 
 ### Classes Principais
 
-- **`Receita`**: Struct que representa uma receita com todos os seus campos
-- **`Database`**: Classe responsável por gerenciar conexão e operações CRUD no SQLite
+- **`Receita`**: Struct que representa uma receita com todos os seus campos:
+  - Informações básicas (nome, ingredientes, preparo, tempo, categoria, porcoes)
+  - Status (feita: bool)
+  - Avaliação (nota: int, 0 = não avaliada, 1-5 = nota)
+  - Tags (std::vector<std::string>)
+
+- **`Database`**: Classe responsável por gerenciar conexão e operações no SQLite:
+  - CRUD de receitas
+  - Gerenciamento de tags (criar, listar, associar, remover)
+  - Filtros (por tag, por nota, receitas feitas)
+  - Avaliação de receitas
+  - Marcação de status (feita/não feita)
+
+### Regras de Negócio
+
+- **Tags**: 
+  - Múltiplas tags podem ser associadas a uma receita
+  - Tags são criadas automaticamente se não existirem
+  - Tags são únicas no sistema (não duplicadas)
+
+- **Avaliação**:
+  - Apenas receitas marcadas como "feitas" podem ser avaliadas
+  - Nota deve estar entre 1 e 5
+  - Nota 0 significa "não avaliada"
+
+- **Segurança**:
+  - Todas as queries SQL usam prepared statements (proteção contra SQL injection)
+  - Foreign keys garantem integridade referencial
 
 ### Compilação
 
 O projeto usa CMake para gerenciar o build. O executável gerado se chama `cookbook`.
+
+## Exemplos de Uso
+
+### Cadastrar uma receita com tags
+```
+1. Cadastrar receita
+   Nome: Bolo de Chocolate
+   Ingredientes: ...
+   Modo de preparo: ...
+   Tempo: 60
+   Categoria: Sobremesa
+   Porcoes: 8
+   Ja foi feita? (s/n): n
+   Deseja adicionar tags? (s/n): s
+   Digite as tags separadas por virgula: doce, chocolate, sobremesa
+```
+
+### Filtrar receitas por tag
+```
+9. Filtrar receitas por tag
+   Digite o nome da tag: chocolate
+```
+
+### Avaliar uma receita
+```
+10. Marcar receita como feita/nao feita
+    (Primeiro marque como feita)
+    
+12. Avaliar receita (1-5)
+    Digite o ID da receita: 1
+    Digite a nota (1 a 5): 5
+```
+
+### Filtrar receitas por nota
+```
+13. Filtrar receitas por nota
+    Digite a nota (1 a 5): 5
+```
 
 ## Licença
 
