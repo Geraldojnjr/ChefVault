@@ -198,6 +198,70 @@ CREATE TABLE receitas_tags (
 - **Build local**: O banco de dados é criado em `./data/recipes.db`
 - **Docker**: O volume `./data` é mapeado para `/app/data` no container, garantindo persistência dos dados mesmo após remover o container
 
+## Testes
+
+O projeto inclui um sistema completo de testes automatizados que verifica todas as funcionalidades.
+
+### Executar Testes
+
+Após compilar o projeto, você tem várias opções:
+
+#### Opção 1: Testes com saída detalhada (recomendado)
+Mostra cada um dos 17 testes individuais e se passou ou falhou:
+
+```bash
+cd build
+make test-verbose
+```
+
+#### Opção 2: Testes resumidos
+Mostra apenas o resultado geral:
+
+```bash
+cd build
+make test
+```
+
+#### Opção 3: Executar diretamente
+Executa o executável de teste diretamente:
+
+```bash
+cd build
+./test_chefvault
+```
+
+### Cobertura de Testes
+
+Os testes cobrem:
+
+#### Funcionalidades Antigas (CRUD Básico)
+- ✅ Criar receita
+- ✅ Listar receitas
+- ✅ Consultar receita por ID
+- ✅ Buscar receita por nome
+- ✅ Excluir receita
+
+#### Funcionalidades Novas - Tags
+- ✅ Criar tag
+- ✅ Listar tags
+- ✅ Adicionar tag a receita
+- ✅ Remover tag de receita
+- ✅ Filtrar receitas por tag
+
+#### Funcionalidades Novas - Status Feita
+- ✅ Marcar receita como feita
+- ✅ Listar receitas feitas
+
+#### Funcionalidades Novas - Avaliação
+- ✅ Avaliar receita (1-5)
+- ✅ Validar que apenas receitas feitas podem ser avaliadas
+- ✅ Filtrar receitas por nota
+- ✅ Validar nota inválida (fora do range 1-5)
+
+**Total: 17 testes automatizados**
+
+Os testes usam um banco de dados temporário (`test_recipes.db`) que é criado e removido automaticamente durante a execução.
+
 ## Desenvolvimento
 
 ### Classes Principais

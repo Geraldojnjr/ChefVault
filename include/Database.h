@@ -12,6 +12,8 @@ private:
     void* db; // SQLite database handle
 
     bool executeQuery(const std::string& query);
+    bool executeQuerySilent(const std::string& query);
+    bool columnExists(const std::string& tableName, const std::string& columnName);
     bool createTable();
     bool createTagsTables();
 

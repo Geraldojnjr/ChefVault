@@ -54,15 +54,20 @@ bool Database::createTable() {
     }
     
     // Adicionar coluna feita se a tabela já existir sem ela (migration)
-    std::string alterQueryFeita = R"(
-        ALTER TABLE receitas ADD COLUMN feita INTEGER DEFAULT 0
-    )";
-    executeQuery(alterQueryFeita);
+    if (!columnExists("receitas", "feita")) {
+        std::string alterQueryFeita = R"(
+            ALTER TABLE receitas ADD COLUMN feita INTEGER DEFAULT 0
+        )";
+        executeQuerySilent(alterQueryFeita);
+    }
     
-    std::string alterQueryNota = R"(
-        ALTER TABLE receitas ADD COLUMN nota INTEGER DEFAULT 0
-    )";
-    executeQuery(alterQueryNota);
+    // Adicionar coluna nota se a tabela já existir sem ela (migration)
+    if (!columnExists("receitas", "nota")) {
+        std::string alterQueryNota = R"(
+            ALTER TABLE receitas ADD COLUMN nota INTEGER DEFAULT 0
+        )";
+        executeQuerySilent(alterQueryNota);
+    }
     
     return true;
 }
@@ -103,6 +108,47 @@ bool Database::executeQuery(const std::string& query) {
     }
     
     return true;
+}
+
+bool Database::executeQuerySilent(const std::string& query) {
+    char* errMsg = nullptr;
+    sqlite3* sqliteDb = (sqlite3*)db;
+    
+    int result = sqlite3_exec(sqliteDb, query.c_str(), nullptr, nullptr, &errMsg);
+    if (errMsg) {
+        sqlite3_free(errMsg);
+    }
+    
+    return (result == SQLITE_OK);
+}
+
+bool Database::columnExists(const std::string& tableName, const std::string& columnName) {
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "PRAGMA table_info(?);";
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    
+    // SQLite PRAGMA não aceita bind parameters, então vamos usar uma query diferente
+    std::string query = "PRAGMA table_info(" + tableName + ");";
+    sqlite3_finalize(stmt);
+    
+    if (sqlite3_prepare_v2(sqliteDb, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        if (name && std::string(name) == columnName) {
+            sqlite3_finalize(stmt);
+            return true;
+        }
+    }
+    
+    sqlite3_finalize(stmt);
+    return false;
 }
 
 int Database::cadastrarReceita(const Receita& receita) {
