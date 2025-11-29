@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cookbook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cookbook-cli
+    volumes:
+      - ./data:/app/data
+    tty: true
+    stdin_open: true
+    command: ./cookbook
+
