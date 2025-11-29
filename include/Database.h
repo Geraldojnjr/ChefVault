@@ -27,6 +27,8 @@ public:
     bool excluirReceita(int id);
     bool marcarReceitaComoFeita(int id, bool feita);
     std::vector<Receita> getReceitasFeitas();
+    bool avaliarReceita(int id, int nota);
+    std::vector<Receita> getReceitasPorNota(int nota);
     void close();
     
     // Métodos de tags
