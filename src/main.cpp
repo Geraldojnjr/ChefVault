@@ -144,8 +144,53 @@ void cadastrarReceita(Database& db) {
     limparBuffer();
     std::getline(std::cin, receita.nome);
     
-    std::cout << "Ingredientes: ";
-    std::getline(std::cin, receita.ingredientes);
+    std::cout << "\n--- Ingredientes Estruturados ---\n";
+    std::cout << "Deseja cadastrar ingredientes com quantidade? (s/n): ";
+    char usarEstruturado;
+    std::cin >> usarEstruturado;
+    limparBuffer();
+    
+    if (usarEstruturado == 's' || usarEstruturado == 'S') {
+        std::cout << "Digite os ingredientes (formato: quantidade unidade nome)\n";
+        std::cout << "Exemplo: 2 xicaras farinha, 3 ovos, 1 colher acucar\n";
+        std::cout << "Ou digite 'fim' para terminar\n";
+        
+        while (true) {
+            std::cout << "Ingrediente: ";
+            std::string linha;
+            std::getline(std::cin, linha);
+            
+            if (linha.empty() || linha == "fim" || linha == "FIM") {
+                break;
+            }
+            
+            std::istringstream iss(linha);
+            double quantidade = 0.0;
+            std::string unidade = "";
+            std::string nome = "";
+            
+            if (iss >> quantidade) {
+                if (iss >> unidade) {
+                    std::getline(iss, nome);
+                    nome.erase(0, nome.find_first_not_of(" \t"));
+                } else {
+                    std::getline(iss, nome);
+                    nome.erase(0, nome.find_first_not_of(" \t"));
+                    unidade = "unidade";
+                }
+                
+                if (!nome.empty()) {
+                    receita.ingredientesEstruturados.push_back(Ingrediente(nome, quantidade, unidade));
+                    std::cout << "  Adicionado: " << receita.ingredientesEstruturados.back().formatar() << "\n";
+                }
+            }
+        }
+        
+        receita.atualizarIngredientesString();
+    } else {
+        std::cout << "Ingredientes (texto livre): ";
+        std::getline(std::cin, receita.ingredientes);
+    }
     
     std::cout << "Modo de preparo: ";
     std::getline(std::cin, receita.preparo);
@@ -300,7 +345,14 @@ void consultarPorId(Database& db) {
         std::cout << "\n";
     }
     
-    std::cout << "\nIngredientes:\n" << receita.ingredientes << "\n";
+    std::cout << "\nIngredientes:\n";
+    if (!receita.ingredientesEstruturados.empty()) {
+        for (const auto& ing : receita.ingredientesEstruturados) {
+            std::cout << "  - " << ing.formatar() << "\n";
+        }
+    } else {
+        std::cout << receita.ingredientes << "\n";
+    }
     std::cout << "\nModo de Preparo:\n" << receita.preparo << "\n";
 }
 

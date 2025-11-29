@@ -6,9 +6,12 @@ Sistema de gerenciamento de receitas em linha de comando (CLI) desenvolvido em C
 
 - CRUD completo de receitas
 - Sistema de tags filtráveis (múltiplas tags por receita)
+- **Autocompletar de tags** - Sugestões inteligentes ao digitar tags
 - Marcar receitas como feitas
 - Sistema de avaliação (notas de 1 a 5)
+- Campo de imagem para receitas
 - Filtros avançados (por tag, por nota, receitas feitas)
+- **Backup e restauração** do banco de dados
 - Banco de dados SQLite persistente com foreign keys
 - Interface CLI interativa
 - Containerização com Docker
@@ -129,24 +132,39 @@ O menu oferece as seguintes opções:
 
 ### Gerenciamento Básico
 1. **Cadastrar receita**: Adiciona uma nova receita ao banco de dados
-   - Permite adicionar tags durante o cadastro
+   - Permite adicionar tags durante o cadastro (com autocompletar)
    - Permite marcar se a receita já foi feita
+   - Permite adicionar caminho de imagem da receita
 2. **Listar receitas**: Exibe todas as receitas cadastradas (com tags, status e nota)
 3. **Consultar detalhes por ID**: Mostra informações completas de uma receita específica
+   - Exibe imagem se disponível
 4. **Buscar por nome ou parte do nome**: Busca receitas que contenham o termo pesquisado
 5. **Excluir receita**: Remove uma receita do banco de dados
 
 ### Gerenciamento de Tags
 6. **Adicionar tag em uma receita**: Associa uma ou múltiplas tags a uma receita existente
+   - **Autocompletar**: Digite `?` para ver todas as tags disponíveis
+   - **Sugestões automáticas**: Mostra sugestões quando a tag não é encontrada exatamente
 7. **Remover tag de uma receita**: Remove uma tag específica de uma receita
+   - **Autocompletar**: Digite `?` para ver as tags da receita
+   - **Busca por prefixo**: Se não encontrar exato, busca por prefixo automaticamente
 8. **Listar tags disponíveis**: Exibe todas as tags cadastradas no sistema
 9. **Filtrar receitas por tag**: Lista todas as receitas que possuem uma tag específica
+   - **Autocompletar**: Digite `?` para ver todas as tags disponíveis
+   - **Sugestões automáticas**: Mostra sugestões quando a tag não é encontrada
 
 ### Status e Avaliação
 10. **Marcar receita como feita/não feita**: Altera o status de conclusão da receita
 11. **Listar receitas feitas**: Filtra e exibe apenas receitas que já foram preparadas
 12. **Avaliar receita (1-5)**: Atribui uma nota de 1 a 5 para receitas que foram feitas
 13. **Filtrar receitas por nota**: Lista receitas feitas com uma nota específica
+
+### Backup e Restauração
+98. **Fazer backup do banco de dados**: Cria um backup completo do banco de dados com timestamp
+99. **Restaurar backup do banco de dados**: Restaura o banco de dados a partir de um backup
+   - Lista backups disponíveis automaticamente
+   - Permite selecionar por número (1, 2, 3...) ou caminho completo
+   - Cria backup de segurança antes de restaurar
 
 0. **Sair**: Encerra o programa
 
@@ -165,7 +183,8 @@ CREATE TABLE receitas (
     categoria TEXT,
     porcoes INTEGER,
     feita INTEGER DEFAULT 0,
-    nota INTEGER DEFAULT 0
+    nota INTEGER DEFAULT 0,
+    imagem TEXT
 );
 ```
 
@@ -270,14 +289,17 @@ Os testes usam um banco de dados temporário (`test_recipes.db`) que é criado e
   - Informações básicas (nome, ingredientes, preparo, tempo, categoria, porcoes)
   - Status (feita: bool)
   - Avaliação (nota: int, 0 = não avaliada, 1-5 = nota)
+  - Imagem (std::string) - caminho para imagem da receita
   - Tags (std::vector<std::string>)
 
 - **`Database`**: Classe responsável por gerenciar conexão e operações no SQLite:
   - CRUD de receitas
   - Gerenciamento de tags (criar, listar, associar, remover)
+  - **Busca de tags por prefixo** (para autocompletar)
   - Filtros (por tag, por nota, receitas feitas)
   - Avaliação de receitas
   - Marcação de status (feita/não feita)
+  - **Backup e restauração** do banco de dados
 
 ### Regras de Negócio
 
@@ -285,11 +307,23 @@ Os testes usam um banco de dados temporário (`test_recipes.db`) que é criado e
   - Múltiplas tags podem ser associadas a uma receita
   - Tags são criadas automaticamente se não existirem
   - Tags são únicas no sistema (não duplicadas)
+  - **Autocompletar**: Sistema inteligente de sugestões
+    - Digite `?` para ver todas as tags disponíveis
+    - Digite parcialmente uma tag para ver sugestões (até 10 sugestões)
+    - Se houver apenas 1 sugestão, ela é selecionada automaticamente
+    - Funciona em todas as operações que envolvem tags
 
 - **Avaliação**:
   - Apenas receitas marcadas como "feitas" podem ser avaliadas
   - Nota deve estar entre 1 e 5
   - Nota 0 significa "não avaliada"
+
+- **Backup e Restauração**:
+  - Backups são criados com timestamp automático
+  - Backup inclui todas as tabelas (receitas, tags, relacionamentos)
+  - Restauração valida integridade do backup antes de aplicar
+  - Cria backup de segurança antes de restaurar
+  - Permite seleção por número ou caminho completo
 
 - **Segurança**:
   - Todas as queries SQL usam prepared statements (proteção contra SQL injection)
@@ -311,8 +345,23 @@ O projeto usa CMake para gerenciar o build. O executável gerado se chama `cookb
    Categoria: Sobremesa
    Porcoes: 8
    Ja foi feita? (s/n): n
+   Caminho da imagem (ou Enter para pular): ./imagens/bolo_chocolate.jpg
    Deseja adicionar tags? (s/n): s
-   Digite as tags separadas por virgula: doce, chocolate, sobremesa
+   Digite as tags separadas por virgula.
+   Dica: Digite ? para ver todas as tags disponiveis.
+   Tags: doce, chocolate, sobremesa
+```
+
+### Usar autocompletar de tags
+```
+Ao adicionar tags, você pode:
+- Digitar ? para ver todas as tags disponíveis
+- Digitar parcialmente uma tag para ver sugestões
+- O sistema mostra automaticamente sugestões quando a tag não é encontrada exatamente
+
+Exemplo:
+Tags: choc?
+Sugestoes para "choc": chocolate, chocolate_branco, chocolate_amargo
 ```
 
 ### Filtrar receitas por tag
@@ -335,6 +384,32 @@ O projeto usa CMake para gerenciar o build. O executável gerado se chama `cookb
 ```
 13. Filtrar receitas por nota
     Digite a nota (1 a 5): 5
+```
+
+### Fazer backup do banco de dados
+```
+98. Fazer backup do banco de dados
+    Caminho do backup (Enter para usar padrão): 
+    Backup concluido com sucesso!
+    Tamanho do arquivo: 28672 bytes
+    Receitas no backup: 5
+```
+
+### Restaurar backup do banco de dados
+```
+99. Restaurar backup do banco de dados
+    ATENCAO: Esta operacao substituira o banco de dados atual!
+    
+    --- Backups Disponiveis ---
+    #    Arquivo                                           Tamanho        
+    ----------------------------------------------------------------------
+    1    recipes_backup_20251129_175515.db                 28 KB          
+    2    recipes_backup_20251129_172321.db                 28 KB          
+    
+    Digite o numero do backup (1-2) ou o caminho completo: 1
+    Backup selecionado: recipes_backup_20251129_175515.db
+    Tem certeza que deseja restaurar o backup? (s/n): s
+    Restaurado: 5 receitas, 10 tags, 15 relacionamentos.
 ```
 
 ## Licença

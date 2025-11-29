@@ -16,6 +16,7 @@ private:
     bool columnExists(const std::string& tableName, const std::string& columnName);
     bool createTable();
     bool createTagsTables();
+    bool createIngredientesTable();
 
 public:
     Database(const std::string& path);
@@ -43,6 +44,11 @@ public:
     std::vector<Receita> getReceitasByTag(const std::string& nomeTag);
     std::vector<std::pair<int, std::string>> listAllTags();
     std::vector<std::string> getTagsByPrefix(const std::string& prefixo);
+    
+    void addIngredienteToReceita(int receitaId, const Ingrediente& ingrediente);
+    std::vector<Ingrediente> getIngredientesFromReceita(int receitaId);
+    void removeIngredienteFromReceita(int receitaId, int ingredienteId);
+    void clearIngredientesFromReceita(int receitaId);
 };
 
 #endif // DATABASE_H

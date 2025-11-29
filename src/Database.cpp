@@ -42,7 +42,11 @@ bool Database::initialize() {
         return false;
     }
     
-    return createTagsTables();
+    if (!createTagsTables()) {
+        return false;
+    }
+    
+    return createIngredientesTable();
 }
 
 bool Database::createTable() {
@@ -65,7 +69,6 @@ bool Database::createTable() {
         return false;
     }
     
-    // Adicionar coluna feita se a tabela já existir sem ela (migration)
     if (!columnExists("receitas", "feita")) {
         std::string alterQueryFeita = R"(
             ALTER TABLE receitas ADD COLUMN feita INTEGER DEFAULT 0
@@ -73,7 +76,6 @@ bool Database::createTable() {
         executeQuerySilent(alterQueryFeita);
     }
     
-    // Adicionar coluna nota se a tabela já existir sem ela (migration)
     if (!columnExists("receitas", "nota")) {
         std::string alterQueryNota = R"(
             ALTER TABLE receitas ADD COLUMN nota INTEGER DEFAULT 0
@@ -114,6 +116,21 @@ bool Database::createTagsTables() {
     )";
     
     return executeQuery(queryReceitasTags);
+}
+
+bool Database::createIngredientesTable() {
+    std::string queryIngredientes = R"(
+        CREATE TABLE IF NOT EXISTS ingredientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            receita_id INTEGER NOT NULL,
+            nome TEXT NOT NULL,
+            quantidade REAL NOT NULL,
+            unidade TEXT,
+            FOREIGN KEY (receita_id) REFERENCES receitas(id) ON DELETE CASCADE
+        )
+    )";
+    
+    return executeQuery(queryIngredientes);
 }
 
 // ============================================================================
@@ -206,6 +223,13 @@ int Database::cadastrarReceita(const Receita& receita) {
     int receitaId = static_cast<int>(sqlite3_last_insert_rowid(sqliteDb));
     sqlite3_finalize(stmt);
     
+    if (!receita.ingredientesEstruturados.empty()) {
+        clearIngredientesFromReceita(receitaId);
+        for (const auto& ing : receita.ingredientesEstruturados) {
+            addIngredienteToReceita(receitaId, ing);
+        }
+    }
+    
     return receitaId;
 }
 
@@ -235,6 +259,8 @@ std::vector<Receita> Database::listarReceitas() {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
+        r.ingredientesEstruturados = getIngredientesFromReceita(r.id);
+        r.atualizarIngredientesString();
         receitas.push_back(r);
     }
     
@@ -269,6 +295,8 @@ Receita Database::consultarPorId(int id) {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         receita.imagem = (img ? std::string(img) : "");
         receita.tags = getTagsFromReceita(receita.id);
+        receita.ingredientesEstruturados = getIngredientesFromReceita(receita.id);
+        receita.atualizarIngredientesString();
     }
     
     sqlite3_finalize(stmt);
@@ -304,6 +332,8 @@ std::vector<Receita> Database::buscarPorNome(const std::string& nome) {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
+        r.ingredientesEstruturados = getIngredientesFromReceita(r.id);
+        r.atualizarIngredientesString();
         receitas.push_back(r);
     }
     
@@ -468,6 +498,8 @@ std::vector<Receita> Database::getReceitasByTag(const std::string& nomeTag) {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
+        r.ingredientesEstruturados = getIngredientesFromReceita(r.id);
+        r.atualizarIngredientesString();
         receitas.push_back(r);
     }
     
@@ -574,6 +606,8 @@ std::vector<Receita> Database::getReceitasFeitas() {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
+        r.ingredientesEstruturados = getIngredientesFromReceita(r.id);
+        r.atualizarIngredientesString();
         receitas.push_back(r);
     }
     
@@ -648,6 +682,8 @@ std::vector<Receita> Database::getReceitasPorNota(int nota) {
         const char* img = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         r.imagem = (img ? std::string(img) : "");
         r.tags = getTagsFromReceita(r.id);
+        r.ingredientesEstruturados = getIngredientesFromReceita(r.id);
+        r.atualizarIngredientesString();
         receitas.push_back(r);
     }
     
@@ -874,6 +910,92 @@ bool Database::restaurarBackup(const std::string& caminhoBackup) {
               << countTags << " tags, " << countRel << " relacionamentos." << std::endl;
     
     return true;
+}
+
+// ============================================================================
+// GERENCIAMENTO DE INGREDIENTES ESTRUTURADOS
+// ============================================================================
+void Database::addIngredienteToReceita(int receitaId, const Ingrediente& ingrediente) {
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "INSERT INTO ingredientes (receita_id, nome, quantidade, unidade) VALUES (?, ?, ?, ?)";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return;
+    }
+    
+    sqlite3_bind_int(stmt, 1, receitaId);
+    sqlite3_bind_text(stmt, 2, ingrediente.nome.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 3, ingrediente.quantidade);
+    sqlite3_bind_text(stmt, 4, ingrediente.unidade.empty() ? nullptr : ingrediente.unidade.c_str(), -1, SQLITE_STATIC);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+std::vector<Ingrediente> Database::getIngredientesFromReceita(int receitaId) {
+    std::vector<Ingrediente> ingredientes;
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "SELECT id, nome, quantidade, unidade FROM ingredientes WHERE receita_id = ? ORDER BY id";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return ingredientes;
+    }
+    
+    sqlite3_bind_int(stmt, 1, receitaId);
+    
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        Ingrediente ing;
+        ing.id = sqlite3_column_int(stmt, 0);
+        ing.nome = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        ing.quantidade = sqlite3_column_double(stmt, 2);
+        const char* unidade = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        ing.unidade = (unidade ? std::string(unidade) : "");
+        ingredientes.push_back(ing);
+    }
+    
+    sqlite3_finalize(stmt);
+    return ingredientes;
+}
+
+void Database::removeIngredienteFromReceita(int receitaId, int ingredienteId) {
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "DELETE FROM ingredientes WHERE receita_id = ? AND id = ?";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return;
+    }
+    
+    sqlite3_bind_int(stmt, 1, receitaId);
+    sqlite3_bind_int(stmt, 2, ingredienteId);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+void Database::clearIngredientesFromReceita(int receitaId) {
+    sqlite3* sqliteDb = (sqlite3*)db;
+    sqlite3_stmt* stmt;
+    
+    const char* sql = "DELETE FROM ingredientes WHERE receita_id = ?";
+    
+    if (sqlite3_prepare_v2(sqliteDb, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Erro ao preparar statement: " << sqlite3_errmsg(sqliteDb) << std::endl;
+        return;
+    }
+    
+    sqlite3_bind_int(stmt, 1, receitaId);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
 }
 
 // ============================================================================
